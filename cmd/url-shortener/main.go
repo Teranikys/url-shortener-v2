@@ -1,20 +1,75 @@
 package main
 
 import (
-	"fmt"
-	"url-shortener-v3/config/config"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"log/slog"
+	"net/http"
+	"os"
+	"url-shortener-v3/internal/config"
+	"url-shortener-v3/internal/http-server/handlers/url/save"
+	"url-shortener-v3/internal/lib/logger/sl"
+	"url-shortener-v3/internal/storage/sqlite"
+)
+
+const (
+	envLocal = "local"
+	envProd  = "prod"
 )
 
 func main() {
 	cfg := config.MustLoad()
 
-	fmt.Println(cfg)
+	log := setupLogger(cfg.Env)
+	log.Info("starting url-shortener", slog.String("env", cfg.Env))
+	log.Debug("debug messages are enabled")
+	log.Error("error messages are enabled")
 
-	// TODO: init logger: slog
+	storage, err := sqlite.New(cfg.StoragePath)
+	if err != nil {
+		log.Error("failed to init storage", sl.Err(err))
+		os.Exit(1)
+	}
 
-	// TODO: init storage: sqlite
+	router := chi.NewRouter()
 
-	// TODO: init router: chi
+	// middleware
+	router.Use(middleware.RequestID)
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.URLFormat)
 
-	// TODO: run server:
+	router.Post("/url", save.New(log, storage))
+
+	log.Info("starting server", slog.String("address", cfg.HTTPServer.Address))
+
+	srv := &http.Server{
+		Addr:         cfg.HTTPServer.Address,
+		Handler:      router,
+		ReadTimeout:  cfg.HTTPServer.Timeout,
+		WriteTimeout: cfg.HTTPServer.Timeout,
+		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
+	}
+
+	if err := srv.ListenAndServe(); err != nil {
+		log.Error("failed to start server")
+	}
+
+	log.Error("server stopped")
+}
+
+func setupLogger(env string) *slog.Logger {
+
+	var log *slog.Logger
+
+	switch env {
+	case envLocal:
+		log = slog.New(slog.NewTextHandler(os.Stdout,
+			&slog.HandlerOptions{Level: slog.LevelDebug}))
+	case envProd:
+		log = slog.New(slog.NewJSONHandler(os.Stdout,
+			&slog.HandlerOptions{Level: slog.LevelInfo}))
+	}
+
+	return log
 }
