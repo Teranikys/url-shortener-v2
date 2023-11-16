@@ -9,6 +9,15 @@ git clone https://github.com/Teranikys/url-shortener-v2.git
 ```
 
 ## Использование
+Добавьте переменную окружения, хранящую путь к конфигурационному файлу:
+- Windows
+```shell
+set CONFIG_PATH=.\config\local.yaml
+```
+- Linux
+```bash
+export CONFIG_PATH=./config/local.yaml
+```
 Запустите сервер:
 ```shell
 go build url-shortener-v2
